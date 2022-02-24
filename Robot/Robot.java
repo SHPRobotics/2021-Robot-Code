@@ -11,6 +11,7 @@ import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.SpeedControllerGroup;
 import edu.wpi.first.wpilibj.TimedRobot;
+import edu.wpi.first.wpilibj.buttons.POVButton;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
@@ -27,6 +28,8 @@ public class Robot extends TimedRobot {
   private CANSparkMax backLeft = new CANSparkMax(2, MotorType.kBrushless);
   private CANSparkMax frontRight = new CANSparkMax(3, MotorType.kBrushless);
   private CANSparkMax backRight = new CANSparkMax(4, MotorType.kBrushless);
+  private CANSparkMax Intake = new CANSparkMax(5,MotorType.kBrushless);
+  private CANSparkMax Arm = new CANSparkMax(6,MotorType.kBrushless);
 
   // SpeedControllerGroup and DifferentialDrive
   private SpeedControllerGroup leftGroup = new SpeedControllerGroup(frontLeft, backLeft);
@@ -41,6 +44,7 @@ public class Robot extends TimedRobot {
   // Joysticks
   private Joystick joyLeft = new Joystick(0);
   private Joystick joyRight = new Joystick(1);
+  private Joystick gamePad = new Joystick(2);
 
   // encoders
   private CANEncoder frontLeftEncoder =  frontLeft.getEncoder();
@@ -128,6 +132,42 @@ public class Robot extends TimedRobot {
 
   @Override
   public void teleopPeriodic() {
+      // Press button 1 on gamePad for Intake to go
+    if(gamePad.getRawButton(1)){
+      Intake.set(1.0);
+    }
+      else{
+        Intake.set(0.0);
+      }
+      // Press button 2 on gamePad for Intake to reverse
+      if(gamePad.getRawButton(2)){
+        Intake.set(-1.0);
+      }
+        else{
+          Intake.set(0.0);
+        }
+
+
+        // Press button 3 on gamePad for Arm to go up
+        if(gamePad.getRawButton(3)){
+          Arm.set(1.0);
+        }
+          else{
+            Arm.set(0.0);
+          }
+          // Press button 4 on gamePad for Arm to go down
+          if(gamePad.getRawButton(4)){
+            Arm.set(-1.0);
+          }
+            else{
+              Arm.set(0.0);
+            }
+            //Arm.getRawButton(POV);
+            
+  
+      
+
+    
     double leftSpeed = -joyLeft.getY() * kDRIVE_SPEED;  //negate because pushing joystick forward always return negative
     double rightSpeed = -joyRight.getY() * kDRIVE_TURN; 
 
@@ -158,7 +198,6 @@ public class Robot extends TimedRobot {
     double rightSpeed = speed - turn;
    
     drive.tankDrive(speed, turn);
-
     frontLeft.set(leftSpeed);
     backLeft.set(leftSpeed);
     frontRight.set(-rightSpeed);
