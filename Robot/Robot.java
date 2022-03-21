@@ -4,10 +4,9 @@
 
 package frc.robot;
 
-import com.revrobotics.CANEncoder;
 import com.revrobotics.CANSparkMax;
+import com.revrobotics.RelativeEncoder;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
-
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Joystick;
@@ -16,12 +15,10 @@ import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
-
 /**
- * The VM is configured to automatically run this class, and to call the
- * functions corresponding to each mode, as described in the TimedRobot
- * documentation. If you change the name of this class or the package after
- * creating this project, you must also update the build.gradle file in the
+ * The VM is configured to automatically run this class, and to call the functions corresponding to
+ * each mode, as described in the TimedRobot documentation. If you change the name of this class or
+ * the package after creating this project, you must also update the build.gradle file in the
  * project.
  */
 public class Robot extends TimedRobot {
@@ -36,11 +33,12 @@ public class Robot extends TimedRobot {
   private CANSparkMax frontRightMotor = new CANSparkMax(3, MotorType.kBrushless);
   private CANSparkMax rearRightMotor = new CANSparkMax(4, MotorType.kBrushless);
 
+
   // encoders
-  private CANEncoder frontLeftEncoder = frontLeftMotor.getEncoder();
-  private CANEncoder frontRightEncoder = frontRightMotor.getEncoder();
-  private CANEncoder rearLeftEncoder = rearLeftMotor.getEncoder();
-  private CANEncoder rearRightEncoder = rearRightMotor.getEncoder();
+  private RelativeEncoder frontLeftEncoder = frontLeftMotor.getEncoder();
+  private RelativeEncoder frontRightEncoder = frontRightMotor.getEncoder();
+  private RelativeEncoder rearLeftEncoder = rearLeftMotor.getEncoder();
+  private RelativeEncoder rearRightEncoder = rearRightMotor.getEncoder();
   // Variable for CANEncoder
   // According to Neo Specification
   // (https://www.revrobotics.com/content/docs/REV-21-1650-DS.pdf)
@@ -49,13 +47,19 @@ public class Robot extends TimedRobot {
   // 42 ticks = (π * wheelDiameterInches) * (ft / 12 Inches) * GearRatio
   // 42 ticks = (π * 6 Inches) * (ft / 12 Inches) * GearRatio
   // ticks = 1/42 * (6 π / 12) * GearRatio
-  private final double kDriveTick2Feet = 1.0 / 42 * 6 * Math.PI / 12 * 4.16;
-  // 42 ticks = (π * wheelDiameterInches) * (ft / 12 Inches) * GearRatio  
-  private final double kArmTick2Deg = 360.0 / 42 / 6.5;
+  //private final double kDriveTick2Feet = 1.0 / 42 * 6 * Math.PI / 12 * 4.16 * 141;
+
+  //https://docs.revrobotics.com/rev-hardware-client/spark-max/navigating-the-client-spark-max
+  // 4096 ticks = (π * wheelDiameterInches) * (ft / 12 Inches) * GearRatio
+  // ticks = 1/4096 * (π * 6) /12
+  //private final double kDriveTick2Feet = 1.0 / 4096 * 6 * Math.PI / 12;
+  private final double kDriveTick2Feet = 0.155;
 
   // Arm
   private CANSparkMax arm = new CANSparkMax(5, MotorType.kBrushless);
-  private CANEncoder armEncoder = arm.getEncoder();
+  private RelativeEncoder armEncoder = arm.getEncoder();
+  //private final double kArmTick2Deg = 360.0 / 42 / 6.5;
+  private final double kArmTick2Deg = 360.0 / 4096.0;
 
   // Climber
   private CANSparkMax climber = new CANSparkMax(6, MotorType.kBrushless);
@@ -80,9 +84,6 @@ public class Robot extends TimedRobot {
   private double tx, ty, tv, ta;
   private double limelightDriveCommand, limelightSteerCommand;
 
-  //for debugging purpose
-  private boolean debug = false;
-
   //autonomous choices
   private static final String kDefaultAuto = "AUTO_SHOOT";
   private static final String kCustomAuto1 = "DRIVE_DISTANCE_LIMIT";
@@ -90,6 +91,8 @@ public class Robot extends TimedRobot {
   private String m_AutoleSelected;
   private final SendableChooser<String> m_AutoChooser = new SendableChooser<>();                   //declare a radio button object to select the desired autonomous 
 
+  private boolean driveDistanceFinished = false;
+  
   /**
    * This function is run when the robot is first started up and should be used for any
    * initialization code.
@@ -103,44 +106,54 @@ public class Robot extends TimedRobot {
     resetEncoders();
 
     //set the conversion factor to each encoder
+/*
     frontLeftEncoder.setPositionConversionFactor(kDriveTick2Feet);
     rearLeftEncoder.setPositionConversionFactor(kDriveTick2Feet);
     frontRightEncoder.setPositionConversionFactor(kDriveTick2Feet);
     rearRightEncoder.setPositionConversionFactor(kDriveTick2Feet);
-
+*/
     //display autonomous choices on Dashboard
     m_AutoChooser.setDefaultOption("AUTO SHOOT", kDefaultAuto);                               //add default choice to radio button object
-    m_AutoChooser.addOption("DRIVE_TIME_LIMIT", kCustomAuto1);                                     //add another choice for autonomous mode
-    m_AutoChooser.addOption("DRIVE_DISTANCE_LIMIT", kCustomAuto2);                                 //add another choice for autonomous mode
+    m_AutoChooser.addOption("DRIVE TIME LIMIT", kCustomAuto1);                                     //add another choice for autonomous mode
+    m_AutoChooser.addOption("DRIVE DISTANCE LIMIT", kCustomAuto2);                                 //add another choice for autonomous mode
     SmartDashboard.putData("Autonomous Mode", m_AutoChooser);                                      //display the choices on SmartDashboard
-
-
   }
 
   @Override
   public void robotPeriodic() {
     log();
-
-    SmartDashboard.putNumber("joyLeft Y", joyLeft.getY());
-    SmartDashboard.putNumber("joyRight Y", joyRight.getY());
-
-    //measure the distance (in ft) how far the drive goes
-    SmartDashboard.putNumber("Left Drive Encoder Value", frontLeftEncoder.getPosition());
-    SmartDashboard.putNumber("Left Drive Encoder Value", frontRightEncoder.getPosition());
-    SmartDashboard.putNumber("Left Drive Encoder Value", rearLeftEncoder.getPosition());
-    SmartDashboard.putNumber("Right Drive Encoder Value", rearRightEncoder.getPosition());
   }
 
   @Override
   public void autonomousInit() {
+    resetEncoders();
+
+    enableMotors(true);                             //set Brake mode
     startTime = Timer.getFPGATimestamp();	              //time when autonomous mode starts
     m_AutoleSelected = m_AutoChooser.getSelected();		//get the autonomous choice
+    SmartDashboard.putString("m_AutoleSelected", m_AutoleSelected);
   }
 
   @Override
   public void autonomousPeriodic() {
+    /*
+    double time = Timer.getFPGATimestamp();
+    if(time -startTime <3){
+    frontLeftMotor.set(-0.2);
+    rearLeftMotor.set(-0.2);
+    frontRightMotor.set(0.2);
+    rearRightMotor.set(0.2);
+    }
+    else{
+    frontLeftMotor.set(0);
+    rearLeftMotor.set(0);
+    frontRightMotor.set(0);
+    rearRightMotor.set(0);
+    }
+    */
+
     switch (m_AutoleSelected){
-      case "AUTO SHOOT":
+      case "AUTO_SHOOT":
         autoShoot();
         break;
       case "DRIVE_DISTANCE_LIMIT":
@@ -157,20 +170,21 @@ public class Robot extends TimedRobot {
       case "DRIVE_TIME_LIMIT":
         double time = Timer.getFPGATimestamp();             //get the current time
 
-        if (time - startTime < kAutoTiming) {           //if we are still in kAutoTiming sec.
+        if (time - startTime < kAutoTiming) {           //if we are still in kAutoTiming sec. kAutoTiming was in place of 3
           frontLeftMotor.set(kTestSpeed);               //drive forward at kTestSpeed
-          rearLeftMotor.set(kTestSpeed);
-          frontRightMotor.set(kTestSpeed);
-          rearRightMotor.set(kTestSpeed);
+          rearLeftMotor.set(kTestSpeed); // negatives were added
+          frontRightMotor.set(-kTestSpeed); //reversed the negative sides 
+          rearRightMotor.set(-kTestSpeed);
         } 
         else {                                          //stop when time is running out
           stop();
         }
         break;
-      case "DRIVE TO TARGET":
+      case "DRIVE_TO_TARGET":
         driveToTarget();
         break;
     }
+ 
   }
 
   @Override
@@ -178,7 +192,8 @@ public class Robot extends TimedRobot {
 
   @Override
   public void teleopPeriodic() {
-      
+    log();
+
     // Intake
     if(gamePad.getRawButton(1)){
       setIntakeIn();
@@ -236,6 +251,7 @@ public class Robot extends TimedRobot {
 
   @Override
   public void testPeriodic() {
+    log();
     // Forward polarity test
     if (joyLeft.getRawButton(5))	        //press and hold button 5 of joystick1
       frontLeftMotor.set(kTestSpeed);		        //  frontLeftMotor wheel should turn forward. If not, change its inverse value
@@ -250,9 +266,14 @@ public class Robot extends TimedRobot {
     else if (joyLeft.getRawButton(2))     //press button 2
       driveStraight();                    //and push joyLeft forward/backward to drive forward/backward in a straight line
     else if (joyLeft.getRawButton(7))     //press button 7
-      driveDistance(5.0, kTestSpeed);           //   drive for 5ft
+      driveDistance(0.1, 0.1);           //   drive for 5ft
     else if (gamePad.getRawButton(5))        //press gamPad button 5
       setArmMotorUp();                          //arm up
+    else if(joyRight.getRawButton(1))
+      //driveDistance(4.0, -1.0);
+      SmartDashboard.putNumber("CurrentPos", getCurrentPos());
+    else if(joyRight.getRawButton(2))
+      autoShoot();
     else stop();			                    //if no button pressed, all motors stop
       
  }
@@ -285,7 +306,6 @@ public class Robot extends TimedRobot {
   }
 
   public void arcadeDrive(double drivePower, double steerPower){
-    if (debug) System.out.println("In arcadeDrive(drive, steer)");
     //apply deadBand
     if (Math.abs(drivePower) <= kDeadband) drivePower = 0.0;
     if (Math.abs(steerPower) <= kDeadband) steerPower = 0.0;
@@ -295,16 +315,9 @@ public class Robot extends TimedRobot {
     frontRightMotor.set(-(drivePower - steerPower));
     rearRightMotor.set( -(drivePower - steerPower));
 
-    if(debug) System.out.println("frontLeftMotor speed: " + (drivePower + steerPower));
-    if(debug) System.out.println("rearLeftMotor speed: " + (drivePower + steerPower));
-    if(debug) System.out.println("frontRightMotor speed: " + (-drivePower + steerPower));
-    if(debug) System.out.println("rearRightMotor speed: " + (-drivePower + steerPower));
-
-    if (debug) System.out.println("End arcadeDrive(drive, steer)");
   }
 
   public void tankDrive(double leftPower, double rightPower){
-    if (debug) System.out.println("In tankDrive(leftPower, rightPower)");
     //apply deadBand
     if (Math.abs(leftPower) <= kDeadband) leftPower = 0.0;
     if (Math.abs(rightPower) <= kDeadband) rightPower= 0.0;
@@ -313,13 +326,6 @@ public class Robot extends TimedRobot {
     rearLeftMotor.set(  leftPower);
     frontRightMotor.set(rightPower);
     rearRightMotor.set( rightPower);
-
-    if(debug) System.out.println("frontLeftMotor speed: " + leftPower);
-    if(debug) System.out.println("rearLeftMotor speed: " + leftPower);
-    if(debug) System.out.println("frontRightMotor speed: " + rightPower);
-    if(debug) System.out.println("rearRightMotor speed: " + rightPower);
-    
-    if (debug) System.out.println("End tankDrive(leftPower, rightPower)");
   }
 
   public void log(){
@@ -345,6 +351,13 @@ public class Robot extends TimedRobot {
 
     SmartDashboard.putNumber("Left Y value", -joyLeft.getY());
     SmartDashboard.putNumber("Right Y value", -joyRight.getY());
+
+    //measure the distance (in ft) how far the drive goes
+    SmartDashboard.putNumber("frontLeft Encoder Value", frontLeftEncoder.getPosition() * kDriveTick2Feet );
+    SmartDashboard.putNumber("frontRight Encoder Value", frontRightEncoder.getPosition() * kDriveTick2Feet );
+    SmartDashboard.putNumber("rearLeft Encoder Value", rearLeftEncoder.getPosition() * kDriveTick2Feet );
+    SmartDashboard.putNumber("rearRight Encoder Value", rearRightEncoder.getPosition() * kDriveTick2Feet);
+
   }
 
   public void update_Limelight_Tracking(){
@@ -355,8 +368,6 @@ public class Robot extends TimedRobot {
     //ty: Vertical Offset From Crosshair To Target (LL1: -20.5 degrees to 20.5 degrees | LL2: -24.85 to 24.85 degrees)
     //tv: Target valid - Whether the limelight has any valid targets (0 = not found or 1 = found)
     //ta: Target Area (0% to 100% of image)
-
-    if (debug) System.out.println("In update_Limelight_Tracking()");
 
     double heading_error = tx;                                        //horizontal offset between camera & target
     double distance_error = ty;                                       //vertical offset between camera & target
@@ -369,20 +380,17 @@ public class Robot extends TimedRobot {
     limelightDriveCommand = 0.0;
 
     if (tv == 0){                                                     //if target is not found
-      if (debug) System.out.println("Target NOT FOUND");
       limelightHasValidTarget = false;
       limelightDriveCommand = 0.0;
       limelightSteerCommand = 0.0;
 
       while (tv == 0.0){
         steering_adjust = 0.3;                                       //seek for the target by spinning in place at a safe speed.
-        if (debug) System.out.println("Robot spin in place at 30% of full speed");
         tankDrive(steering_adjust, -steering_adjust);
       }
      // return;
     }
 
-    if (debug) System.out.println("Target FOUND");
     limelightHasValidTarget = true;                                   //target found
 
     //steering
@@ -398,26 +406,19 @@ public class Robot extends TimedRobot {
     double distance_adjust = kpDistance * distance_error;
     limelightDriveCommand = distance_adjust;
 
-    if (debug) System.out.println("limelightDriveCommand" + limelightDriveCommand);
-    if (debug) System.out.println("limelightSteerCommand" + limelightSteerCommand);
-    if (debug) System.out.println("End update_Limelight_Tracking()");
   }
 
   public double getCurrentPos(){
-    if(debug) System.out.println("In getCurrentPos()");
     double position =
                (frontLeftEncoder.getPosition() +
-                rearLeftEncoder.getPosition() +
-                frontRightEncoder.getPosition() +
-                rearRightEncoder.getPosition()) / 4;
+                frontRightEncoder.getPosition() ) /2;
 
-    if (debug) System.out.println("current position: " + position);
-    if(debug) System.out.println("End getCurrentPos()");
+    position *= kDriveTick2Feet;
+
     return position;
   }
 
   public void driveToTarget(){
-    if(debug) System.out.println("In driveToTarget");
     // With limelight assistance, drive the robot to target using arcade drive mode
 
     update_Limelight_Tracking();                                    //get the limelightDriveCommand and limelightSteerCommand
@@ -425,29 +426,25 @@ public class Robot extends TimedRobot {
     if (limelightHasValidTarget){                                   //if found the target
       tankDrive(limelightDriveCommand, -limelightSteerCommand);      //drive to that target
     }
-    if(debug) System.out.println("End driveToTarget");
   }
 
   public void driveDistance(double feet, double speed){
-    if(debug) System.out.println("In driveDistance");
-    resetEncoders();
-    double errDistance = feet - getCurrentPos();
+    double distance = Math.abs(getCurrentPos());
+    SmartDashboard.putNumber("distance", distance);
 
-    while (errDistance > 0){
+    if (distance < feet){
       tankDrive(speed, speed);
-      errDistance = feet - getCurrentPos();
-      System.out.println("errDistance = " + errDistance);
     }
-    stop();
-
-    if(debug) System.out.println("End driveDistance");
+    else{
+      tankDrive(0,0);
+      driveDistanceFinished = true;
+    }
   }
 
   //drive Straight with the speed provided by joysticks
   public void driveStraight(){
     double joystickInput1, joystickInput2;
 
-    if(debug) System.out.println("In driveStraight");
     joystickInput1 = - joyLeft.getY()  * kMaxDriveSpeed;
     joystickInput2 = - joyRight.getY() * kMaxDriveSpeed;
 
@@ -460,13 +457,11 @@ public class Robot extends TimedRobot {
     SmartDashboard.putNumber("Right side speed:", joystickInput2);
 
     tankDrive(joystickInput1, joystickInput2);
-    if(debug) System.out.println("End driveStraight");    
   }
 
   //drive straight with a preset speed
   public void driveStraight(double speed){
 
-    if(debug) System.out.println("In driveStraight(dist)");
     double joystickInput1 = speed;
     double joystickInput2 = speed;
 
@@ -479,7 +474,6 @@ public class Robot extends TimedRobot {
     SmartDashboard.putNumber("Right side speed:", joystickInput2);
 
     tankDrive(joystickInput1, joystickInput2);
-    if(debug) System.out.println("End driveStraight(dist)");    
   }
 
   //drive straight at a preset speed within preset distance
@@ -532,13 +526,11 @@ public class Robot extends TimedRobot {
   }
   
   public void autoShoot(){
-    //turn on intake for 5 sec
-    setIntakeIn(5.0);
-
     //move backward straight for 4ft
-    driveDistance(4.0, -1.0);
+    driveDistance(4.0, -0.2);
 
-    driveToTarget();
+    //if (driveDistanceFinished) driveToTarget();
+
   }
 
   public double getArmAngle(){
