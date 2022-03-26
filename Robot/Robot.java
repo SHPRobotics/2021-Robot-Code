@@ -6,13 +6,15 @@ package frc.robot;
 
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.RelativeEncoder;
+import com.revrobotics.CANSparkMax.SoftLimitDirection;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
+import edu.wpi.first.wpilibj.
+.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 /**
@@ -33,12 +35,12 @@ public class Robot extends TimedRobot {
   private CANSparkMax frontRightMotor = new CANSparkMax(3, MotorType.kBrushless);
   private CANSparkMax rearRightMotor = new CANSparkMax(4, MotorType.kBrushless);
 
-
   // encoders
   private RelativeEncoder frontLeftEncoder = frontLeftMotor.getEncoder();
   private RelativeEncoder frontRightEncoder = frontRightMotor.getEncoder();
   private RelativeEncoder rearLeftEncoder = rearLeftMotor.getEncoder();
   private RelativeEncoder rearRightEncoder = rearRightMotor.getEncoder();
+
   // Variable for CANEncoder
   // According to Neo Specification
   // (https://www.revrobotics.com/content/docs/REV-21-1650-DS.pdf)
@@ -47,24 +49,21 @@ public class Robot extends TimedRobot {
   // 42 ticks = (π * wheelDiameterInches) * (ft / 12 Inches) * GearRatio
   // 42 ticks = (π * 6 Inches) * (ft / 12 Inches) * GearRatio
   // ticks = 1/42 * (6 π / 12) * GearRatio
-  //private final double kDriveTick2Feet = 1.0 / 42 * 6 * Math.PI / 12 * 4.16 * 141;
-
-  //https://docs.revrobotics.com/rev-hardware-client/spark-max/navigating-the-client-spark-max
-  // 4096 ticks = (π * wheelDiameterInches) * (ft / 12 Inches) * GearRatio
-  // ticks = 1/4096 * (π * 6) /12
-  //private final double kDriveTick2Feet = 1.0 / 4096 * 6 * Math.PI / 12;
+  //private final double kDriveTick2Feet = 1.0 / 42 * 6 * Math.PI / 12 ;
   private final double kDriveTick2Feet = 0.155;
 
   // Arm
   private CANSparkMax arm = new CANSparkMax(5, MotorType.kBrushless);
   private RelativeEncoder armEncoder = arm.getEncoder();
   //private final double kArmTick2Deg = 360.0 / 42 / 6.5;
-  private final double kArmTick2Deg = 360.0 / 4096.0;
+  private final double kArmTick2Deg = 0.9494;
 
   // Climber
-  private CANSparkMax climber = new CANSparkMax(6, MotorType.kBrushless);
-  // Intake
-  private CANSparkMax intake = new CANSparkMax(7,MotorType.kBrushed);
+   private CANSparkMax climber = new CANSparkMax(6, MotorType.kBrushless);
+   private RelativeEncoder climberEncoder = climber.getEncoder();
+
+   // Intake
+  private CANSparkMax intake = new CANSparkMax(7,MotorType.kBrushless);
 
   // Variables for Intake (Redline 775 Motor w Encoder)
   //Ref:https://motors.vex.com/vexpro-motors/775pro
@@ -76,7 +75,7 @@ public class Robot extends TimedRobot {
   private double kMaxDriveSpeed =  0.75;   //limit the drive speed
   private double kAutoTiming = 3.0;        //autonomous timing drive in sec
   private double kAutoDistanceFt = 5.0;	   //autonomous distance in feet
-  private double startTime;                //time when autonomous mode starts
+  private double startTime = 0.0;          //time when autonomous mode starts
 
   //variables controlling limelight camera
   private boolean limelightHasValidTarget = false;
@@ -87,7 +86,8 @@ public class Robot extends TimedRobot {
   //autonomous choices
   private static final String kDefaultAuto = "AUTO_SHOOT";
   private static final String kCustomAuto1 = "DRIVE_DISTANCE_LIMIT";
-  private static final String kCustomAuto2 = "DRIVE_TIME_LIMIT";    
+  private static final String kCustomAuto2 = "DRIVE_TIME_LIMIT";
+  private static final String kCustomAuto3 = "DRIVE_TO_TARGET";
   private String m_AutoleSelected;
   private final SendableChooser<String> m_AutoChooser = new SendableChooser<>();                   //declare a radio button object to select the desired autonomous 
 
@@ -105,6 +105,13 @@ public class Robot extends TimedRobot {
     //reset encoders to zero position
     resetEncoders();
 
+    //set rotation limit for arm 
+    arm.setSoftLimit(SoftLimitDirection.kForward, (float) (0.0 / kArmTick2Deg));
+    arm.setSoftLimit(SoftLimitDirection.kReverse, (float) (60.5 / kArmTick2Deg));
+    //set rotation limit for climber
+    climber.setSoftLimit(SoftLimitDirection.kForward, (float) (0.0 / kArmTick2Deg));
+    climber.setSoftLimit(SoftLimitDirection.kReverse, (float) (60.5 / kArmTick2Deg));
+
     //set the conversion factor to each encoder
 /*
     frontLeftEncoder.setPositionConversionFactor(kDriveTick2Feet);
@@ -116,12 +123,13 @@ public class Robot extends TimedRobot {
     m_AutoChooser.setDefaultOption("AUTO SHOOT", kDefaultAuto);                               //add default choice to radio button object
     m_AutoChooser.addOption("DRIVE TIME LIMIT", kCustomAuto1);                                     //add another choice for autonomous mode
     m_AutoChooser.addOption("DRIVE DISTANCE LIMIT", kCustomAuto2);                                 //add another choice for autonomous mode
+    m_AutoChooser.addOption("DRIVE TO TARGET", kCustomAuto3);                                 //add another choice for autonomous mode
     SmartDashboard.putData("Autonomous Mode", m_AutoChooser);                                      //display the choices on SmartDashboard
   }
 
   @Override
   public void robotPeriodic() {
-    log();
+    //log();
   }
 
   @Override
@@ -136,49 +144,16 @@ public class Robot extends TimedRobot {
 
   @Override
   public void autonomousPeriodic() {
-    /*
-    double time = Timer.getFPGATimestamp();
-    if(time -startTime <3){
-    frontLeftMotor.set(-0.2);
-    rearLeftMotor.set(-0.2);
-    frontRightMotor.set(0.2);
-    rearRightMotor.set(0.2);
-    }
-    else{
-    frontLeftMotor.set(0);
-    rearLeftMotor.set(0);
-    frontRightMotor.set(0);
-    rearRightMotor.set(0);
-    }
-    */
 
     switch (m_AutoleSelected){
       case "AUTO_SHOOT":
         autoShoot();
         break;
       case "DRIVE_DISTANCE_LIMIT":
-        double distance = getCurrentPos();
-
-        //drive at 60% of power until kAutoDistanceFt ft
-        if (distance < kAutoDistanceFt) {
-          tankDrive(kTestSpeed, kTestSpeed);
-        } 
-        else {
-          stop();
-        }
+        driveDistance(kAutoDistanceFt, kTestSpeed);
         break;
       case "DRIVE_TIME_LIMIT":
-        double time = Timer.getFPGATimestamp();             //get the current time
-
-        if (time - startTime < kAutoTiming) {           //if we are still in kAutoTiming sec. kAutoTiming was in place of 3
-          frontLeftMotor.set(kTestSpeed);               //drive forward at kTestSpeed
-          rearLeftMotor.set(kTestSpeed); // negatives were added
-          frontRightMotor.set(-kTestSpeed); //reversed the negative sides 
-          rearRightMotor.set(-kTestSpeed);
-        } 
-        else {                                          //stop when time is running out
-          stop();
-        }
+        driveTime(kAutoTiming, kTestSpeed);
         break;
       case "DRIVE_TO_TARGET":
         driveToTarget();
@@ -188,7 +163,11 @@ public class Robot extends TimedRobot {
   }
 
   @Override
-  public void teleopInit() {}
+  public void teleopInit() {
+    //reset arm and climber encoders
+    armEncoder.setPosition(0.0);
+    climberEncoder.setPosition(0.0);
+  }
 
   @Override
   public void teleopPeriodic() {
@@ -208,6 +187,9 @@ public class Robot extends TimedRobot {
     }
     else if(gamePad.getRawButton(3)){
       setArmMotorDown();
+    }
+    else if(gamePad.getRawButton(5)){
+      armEncoder.setPosition((45.0 - 2.8217)/0.9929);
     }
     
     // climb
@@ -269,9 +251,6 @@ public class Robot extends TimedRobot {
       driveDistance(0.1, 0.1);           //   drive for 5ft
     else if (gamePad.getRawButton(5))        //press gamPad button 5
       setArmMotorUp();                          //arm up
-    else if(joyRight.getRawButton(1))
-      //driveDistance(4.0, -1.0);
-      SmartDashboard.putNumber("CurrentPos", getCurrentPos());
     else if(joyRight.getRawButton(2))
       autoShoot();
     else stop();			                    //if no button pressed, all motors stop
@@ -358,6 +337,13 @@ public class Robot extends TimedRobot {
     SmartDashboard.putNumber("rearLeft Encoder Value", rearLeftEncoder.getPosition() * kDriveTick2Feet );
     SmartDashboard.putNumber("rearRight Encoder Value", rearRightEncoder.getPosition() * kDriveTick2Feet);
 
+    SmartDashboard.putNumber("Arm Encoder possition", armEncoder.getPosition());
+//    SmartDashboard.putNumber("Arm angle", armEncoder.getPosition() * kArmTick2Deg + 76.867);
+    SmartDashboard.putNumber("Arm angle", armEncoder.getPosition() * 0.9929 + 2.8217);
+
+    SmartDashboard.putNumber("ClimberEncoder possition", climberEncoder.getPosition());
+    SmartDashboard.putNumber("Climber angle", climberEncoder.getPosition() * kArmTick2Deg+ 76.867);
+
   }
 
   public void update_Limelight_Tracking(){
@@ -384,28 +370,65 @@ public class Robot extends TimedRobot {
       limelightDriveCommand = 0.0;
       limelightSteerCommand = 0.0;
 
-      while (tv == 0.0){
-        steering_adjust = 0.3;                                       //seek for the target by spinning in place at a safe speed.
+      if (startTime == 0.0) startTime = Timer.getFPGATimestamp();
+      double time = Timer.getFPGATimestamp();
+      if(time - startTime < 1.0){
+        steering_adjust = 0.2;                                       //seek for the target by spinning in place at a safe speed.
         tankDrive(steering_adjust, -steering_adjust);
       }
-     // return;
+      else{
+        stop();
+      }
+
     }
+    else{
+      limelightHasValidTarget = true;                                   //target found
 
-    limelightHasValidTarget = true;                                   //target found
+      //steering
+      if (tx > 1.0){                                                    //if target is to the right side of the camera
+        steering_adjust = KpAim * heading_error - min_aim_command;      //  steer to the left
+      }
+      else if (tx < -1.0){                                                            //if target is to the left side of the camera
+        steering_adjust = KpAim * heading_error + min_aim_command;      //  steer to the right
+      }
+      limelightSteerCommand = steering_adjust;
 
-    //steering
-    if (tx > 1.0){                                                    //if target is to the right side of the camera
-      steering_adjust = KpAim * heading_error - min_aim_command;      //  steer to the left
+      //driving
+      distance_error = estimate_distance();
+
+      double distance_adjust = kpDistance * distance_error;
+      limelightDriveCommand = distance_adjust;
     }
-    else if (tx < -1.0){                                                            //if target is to the left side of the camera
-      steering_adjust = KpAim * heading_error + min_aim_command;      //  steer to the right
-    }
-    limelightSteerCommand = steering_adjust;
+  }
 
-    //driving
-    double distance_adjust = kpDistance * distance_error;
-    limelightDriveCommand = distance_adjust;
+  public double estimate_distance(){
+    /*
+    https://docs.limelightvision.io/en/latest/cs_estimating_distance.html
 
+    d = (h2 - h1) / tan(a1 + a2)
+
+    */
+
+    double targetOffsetAngle_Vertical = ty;   // (a2)
+
+    // how many degrees back is your limelight rotated from perfectly vertical? (a1)
+    double limelightMountAngleDegrees = 0.0;
+
+    // distance (in) from the center of the Limelight lens to the floor (h1)
+    double limelightHeightInches = 3.0 * 12.0;
+
+    // distance from the target to the floor (h2)
+    double goalHeightInches = 0.0;
+
+    // (a1 + a2)
+    double angleToGoalDegrees = limelightMountAngleDegrees + targetOffsetAngle_Vertical;
+    double angleToGoalRadians = angleToGoalDegrees * (3.14159 / 180.0);
+
+    //calculate distance
+    // d = (h2 - h1) / tan (a1 + a2)
+    double distanceFromLimelightToGoalInches = Math.abs(goalHeightInches - limelightHeightInches)/Math.tan(angleToGoalRadians);
+
+    return distanceFromLimelightToGoalInches;
   }
 
   public double getCurrentPos(){
@@ -430,7 +453,6 @@ public class Robot extends TimedRobot {
 
   public void driveDistance(double feet, double speed){
     double distance = Math.abs(getCurrentPos());
-    SmartDashboard.putNumber("distance", distance);
 
     if (distance < feet){
       tankDrive(speed, speed);
@@ -453,9 +475,6 @@ public class Robot extends TimedRobot {
     if (Math.abs(joystickInput1) > Math.abs(joystickInput2)) joystickInput2 = joystickInput1;
     else joystickInput1 = joystickInput2;
 
-    SmartDashboard.putNumber("Left side speed :", joystickInput1);
-    SmartDashboard.putNumber("Right side speed:", joystickInput2);
-
     tankDrive(joystickInput1, joystickInput2);
   }
 
@@ -470,15 +489,19 @@ public class Robot extends TimedRobot {
     if (Math.abs(joystickInput1) > Math.abs(joystickInput2)) joystickInput2 = joystickInput1;
     else joystickInput1 = joystickInput2;
 
-    SmartDashboard.putNumber("Left side speed :", joystickInput1);
-    SmartDashboard.putNumber("Right side speed:", joystickInput2);
-
     tankDrive(joystickInput1, joystickInput2);
   }
 
-  //drive straight at a preset speed within preset distance
-  public void autoDriveStraight(double speed, double dist){
+  public void driveTime(double timeLimit, double speed) {
+    if (startTime == 0.0) startTime = Timer.getFPGATimestamp();
 
+    double time = Timer.getFPGATimestamp();
+    if (time - startTime < timeLimit){
+      tankDrive(speed, speed);
+    }
+    else{
+      stop();
+    }
   }
 
   public void stop(){
@@ -490,13 +513,11 @@ public class Robot extends TimedRobot {
 
   public void setArmMotorUp(){
     arm.set(0.6);
-    SmartDashboard.putNumber("arm angle", getArmAngle());
     //armEncoder.setPosition(293.0); // needs to be double number for up position
   }
 
   public void setArmMotorDown(){
     arm.set(-0.6);
-    SmartDashboard.putNumber("arm angle", getArmAngle());    
   }
 
   public void setClimberMotorUp(){
@@ -508,7 +529,7 @@ public class Robot extends TimedRobot {
   }
 
   public void setIntakeIn(){
-    intake.set(1.0);
+    intake.set(-1.0);
   }
 
   public void setIntakeIn(double time){
@@ -521,13 +542,24 @@ public class Robot extends TimedRobot {
   }
 
   public void setIntakeOut(){
-      intake.set(-1.0);
+      intake.set(1.0);
       //intake out
   }
   
   public void autoShoot(){
-    //move backward straight for 4ft
-    driveDistance(4.0, -0.2);
+    double time = Timer.getFPGATimestamp();
+     // it will shoot the ball for 2 seconds
+     if (time - startTime < 2){
+      setIntakeIn();
+    }
+    else{
+      intake.set(0);
+      //move backward straight for 4ft
+      driveDistance(4.0, -0.2);
+    }
+    
+   
+    
 
     //if (driveDistanceFinished) driveToTarget();
 
@@ -537,8 +569,11 @@ public class Robot extends TimedRobot {
     double angle = 0.0;
 
     angle = armEncoder.getPosition() * kArmTick2Deg;
-    SmartDashboard.putNumber("Arm Enoder possition", armEncoder.getPosition());
-    SmartDashboard.putNumber("Arm angle", angle);
     return angle;
   }
-}
+  public double getClimberAngle(){
+    double angle = 0.0;
+    angle = climberEncoder.getPosition() * kArmTick2Deg;
+    return angle;
+  }
+}// end of robot.java
