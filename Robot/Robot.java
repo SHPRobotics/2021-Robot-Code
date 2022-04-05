@@ -13,8 +13,7 @@ import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.
-.SendableChooser;
+import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 /**
@@ -49,33 +48,39 @@ public class Robot extends TimedRobot {
   // 42 ticks = (π * wheelDiameterInches) * (ft / 12 Inches) * GearRatio
   // 42 ticks = (π * 6 Inches) * (ft / 12 Inches) * GearRatio
   // ticks = 1/42 * (6 π / 12) * GearRatio
-  //private final double kDriveTick2Feet = 1.0 / 42 * 6 * Math.PI / 12 ;
+  //private final double kDriveTick2Feet = 1.0 / 42 * 6 * Math.PI / 12 * 4.16 * 141;
+
+  //https://docs.revrobotics.com/rev-hardware-client/spark-max/navigating-the-client-spark-max
+  // 4096 ticks = (π * wheelDiameterInches) * (ft / 12 Inches) * GearRatio
+  // ticks = 1/4096 * (π * 6) /12
+  //private final double kDriveTick2Feet = 1.0 / 4096 * 6 * Math.PI / 12;
   private final double kDriveTick2Feet = 0.155;
 
   // Arm
   private CANSparkMax arm = new CANSparkMax(5, MotorType.kBrushless);
   private RelativeEncoder armEncoder = arm.getEncoder();
   //private final double kArmTick2Deg = 360.0 / 42 / 6.5;
-  private final double kArmTick2Deg = 0.9494;
+  private final double kArmTick2Deg = 0.9868; //1.3186;
 
   // Climber
-   private CANSparkMax climber = new CANSparkMax(6, MotorType.kBrushless);
-   private RelativeEncoder climberEncoder = climber.getEncoder();
+  private CANSparkMax climber = new CANSparkMax(6, MotorType.kBrushless);
+  private RelativeEncoder climberEncoder = climber.getEncoder();
 
-   // Intake
-  private CANSparkMax intake = new CANSparkMax(7,MotorType.kBrushless);
+  // Intake
+   private CANSparkMax intake = new CANSparkMax(7,MotorType.kBrushless);
 
   // Variables for Intake (Redline 775 Motor w Encoder)
   //Ref:https://motors.vex.com/vexpro-motors/775pro
   //1 RPM = 0.10472 Rad/s
   //Free Speed = 18700 RPM * 0.10472 Rad/sec / RPM = 1958.264 Rad/sec
+
   // variables to control the drivetrain
-  private final double kDeadband = 0.02;   //motors will stop (to save the motor from burning) if the abs(joystick input) is less than the deadBand
+  private final double kDeadband = 0.05;   //motors will stop (to save the motor from burning) if the abs(joystick input) is less than the deadBand
   private double kTestSpeed = 0.3;         //limit the test speed
   private double kMaxDriveSpeed =  0.75;   //limit the drive speed
   private double kAutoTiming = 3.0;        //autonomous timing drive in sec
   private double kAutoDistanceFt = 5.0;	   //autonomous distance in feet
-  private double startTime = 0.0;          //time when autonomous mode starts
+  private double startTime;                //time when autonomous mode starts
 
   //variables controlling limelight camera
   private boolean limelightHasValidTarget = false;
@@ -86,8 +91,8 @@ public class Robot extends TimedRobot {
   //autonomous choices
   private static final String kDefaultAuto = "AUTO_SHOOT";
   private static final String kCustomAuto1 = "DRIVE_DISTANCE_LIMIT";
-  private static final String kCustomAuto2 = "DRIVE_TIME_LIMIT";
-  private static final String kCustomAuto3 = "DRIVE_TO_TARGET";
+  private static final String kCustomAuto2 = "DRIVE_TIME_LIMIT";    
+  private static final String kCustomAuto3 = "DRIVE_TIME_TARGET";    
   private String m_AutoleSelected;
   private final SendableChooser<String> m_AutoChooser = new SendableChooser<>();                   //declare a radio button object to select the desired autonomous 
 
@@ -99,18 +104,26 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void robotInit() {
-    enableMotors(true);                             //set Brake mode
+    //enableMotors(true);                             //set Brake mode
     setInvertMotors();                              //setInverted motors
 
     //reset encoders to zero position
     resetEncoders();
-
-    //set rotation limit for arm 
-    arm.setSoftLimit(SoftLimitDirection.kForward, (float) (0.0 / kArmTick2Deg));
-    arm.setSoftLimit(SoftLimitDirection.kReverse, (float) (60.5 / kArmTick2Deg));
-    //set rotation limit for climber
-    climber.setSoftLimit(SoftLimitDirection.kForward, (float) (0.0 / kArmTick2Deg));
-    climber.setSoftLimit(SoftLimitDirection.kReverse, (float) (60.5 / kArmTick2Deg));
+/*
+    //set forward and reverse boundary limits for the arm 
+    arm.setSoftLimit(SoftLimitDirection.kForward, (float) (160.0 / kArmTick2Deg));
+    arm.setSoftLimit(SoftLimitDirection.kReverse, (float) (0.0 / kArmTick2Deg));
+    //enable the arm softLimits
+    arm.enableSoftLimit(SoftLimitDirection.kForward, true);
+    arm.enableSoftLimit(SoftLimitDirection.kReverse, true);
+/*
+    //set forward and reverse boundary limits for the climber 
+    climber.setSoftLimit(SoftLimitDirection.kForward, (float) (60.5 / kArmTick2Deg));
+    climber.setSoftLimit(SoftLimitDirection.kReverse, (float) (0.0 / kArmTick2Deg));
+    //enable the arm softLimits
+    climber.enableSoftLimit(SoftLimitDirection.kForward, true);
+    climber.enableSoftLimit(SoftLimitDirection.kReverse, true);
+*/
 
     //set the conversion factor to each encoder
 /*
@@ -121,15 +134,15 @@ public class Robot extends TimedRobot {
 */
     //display autonomous choices on Dashboard
     m_AutoChooser.setDefaultOption("AUTO SHOOT", kDefaultAuto);                               //add default choice to radio button object
-    m_AutoChooser.addOption("DRIVE TIME LIMIT", kCustomAuto1);                                     //add another choice for autonomous mode
-    m_AutoChooser.addOption("DRIVE DISTANCE LIMIT", kCustomAuto2);                                 //add another choice for autonomous mode
+    m_AutoChooser.addOption("DRIVE TIME LIMIT", kCustomAuto1);                                //add another choice for autonomous mode
+    m_AutoChooser.addOption("DRIVE DISTANCE LIMIT", kCustomAuto2);                            //add another choice for autonomous mode
     m_AutoChooser.addOption("DRIVE TO TARGET", kCustomAuto3);                                 //add another choice for autonomous mode
-    SmartDashboard.putData("Autonomous Mode", m_AutoChooser);                                      //display the choices on SmartDashboard
+    SmartDashboard.putData("Autonomous Mode", m_AutoChooser);                                 //display the choices on SmartDashboard
   }
 
   @Override
   public void robotPeriodic() {
-    //log();
+    log();
   }
 
   @Override
@@ -164,55 +177,54 @@ public class Robot extends TimedRobot {
 
   @Override
   public void teleopInit() {
-    //reset arm and climber encoders
-    armEncoder.setPosition(0.0);
-    climberEncoder.setPosition(0.0);
+    enableMotors(true);
   }
 
   @Override
   public void teleopPeriodic() {
-    log();
+    //log();
 
-    // Intake
-    if(gamePad.getRawButton(1)){
-      setIntakeIn();
-    }
-    else if(gamePad.getRawButton(2)){
-      setIntakeOut();
-    }
-
-    // Arm
-    else if(gamePad.getRawButton(4)){
-      setArmMotorUp();
-    }
-    else if(gamePad.getRawButton(3)){
-      setArmMotorDown();
-    }
-    else if(gamePad.getRawButton(5)){
-      armEncoder.setPosition((45.0 - 2.8217)/0.9929);
-    }
-    
-    // climb
-    else if(gamePad.getRawButton(6)){
-      setClimberMotorUp();
-    }
-    else if(gamePad.getRawButton(8)){
-      setClimberMotorDown();
-    }
-    else{
-      intake.set(0);
-      climber.set(0);
-      arm.set(0);
-    }
-
+    //Driving
     double leftSpeed = -joyLeft.getY() * kMaxDriveSpeed;  //negate because pushing joystick forward always return negative
     double rightSpeed = -joyRight.getY() * kMaxDriveSpeed; 
+    //apply deadband
+    if (Math.abs(leftSpeed) < kDeadband) leftSpeed = 0.0;
+    if (Math.abs(rightSpeed) < kDeadband) rightSpeed = 0.0;
 
     if (joyLeft.getRawButton(1)){         //we use button 1 to tell the robot to drive to target with limelight assistance
         driveToTarget();
     } else{
         tankDrive(leftSpeed, rightSpeed);
     }
+
+    // Intake
+    double intakePower = 0.0;
+    if (gamePad.getRawButton(1)) intakePower = -1.0;
+    else if (gamePad.getRawButton(2)) intakePower = 1.0;
+    intake.set(intakePower);
+
+    // Arm
+    //control arm using a button
+    double armPower = 0.0;
+    if (gamePad.getRawButton(4)) armPower = 0.6;
+    else if (gamePad.getRawButton(3)) armPower = -0.6;
+/*
+    else{
+      //control arm using joystick
+      //REMEMBER to press MODE button on gamePad to make it works like a Joystick, Not as a POV (default)
+      armPower = - gamePad.getRawAxis(1);
+      //apply deadband
+      if (Math.abs(armPower) < kDeadband) armPower = 0.0;
+      armPower *= 0.6;  //60% of full power
+    }
+*/
+    arm.set(armPower);
+
+    // climber
+    double climbPower = 0.0;
+    if (gamePad.getRawButton(6)) climbPower = 1.0;
+    else if(gamePad.getRawButton(8)) climbPower = -1.0;
+    climber.set(climbPower);
 
   }
 
@@ -223,7 +235,7 @@ public class Robot extends TimedRobot {
 
   @Override
   public void disabledPeriodic() {
-    //enableMotors(false);
+    enableMotors(false);
   }
 
   @Override
@@ -251,6 +263,8 @@ public class Robot extends TimedRobot {
       driveDistance(0.1, 0.1);           //   drive for 5ft
     else if (gamePad.getRawButton(5))        //press gamPad button 5
       setArmMotorUp();                          //arm up
+    else if(joyRight.getRawButton(1))
+      driveDistance(4.0, -1.0);
     else if(joyRight.getRawButton(2))
       autoShoot();
     else stop();			                    //if no button pressed, all motors stop
@@ -267,14 +281,23 @@ public class Robot extends TimedRobot {
     rearLeftMotor.setIdleMode(mode);
     frontRightMotor.setIdleMode(mode);
     rearRightMotor.setIdleMode(mode);
+
+    arm.setIdleMode(mode);
+    climber.setIdleMode(mode);
   }
 
   public void resetEncoders(){
-    //reset encoders to zero position
+    //reset drivetrain encoders to zero position
     frontLeftEncoder.setPosition(0.0);
     frontRightEncoder.setPosition(0.0);
     rearLeftEncoder.setPosition(0.0);
     rearRightEncoder.setPosition(0.0);
+
+    //reset arm encoder to zero position
+    armEncoder.setPosition(0.0);
+    //reset climber encoder to zero position
+    climberEncoder.setPosition(0.0);
+
   }
 
   public void setInvertMotors(){
@@ -337,12 +360,11 @@ public class Robot extends TimedRobot {
     SmartDashboard.putNumber("rearLeft Encoder Value", rearLeftEncoder.getPosition() * kDriveTick2Feet );
     SmartDashboard.putNumber("rearRight Encoder Value", rearRightEncoder.getPosition() * kDriveTick2Feet);
 
-    SmartDashboard.putNumber("Arm Encoder possition", armEncoder.getPosition());
-//    SmartDashboard.putNumber("Arm angle", armEncoder.getPosition() * kArmTick2Deg + 76.867);
-    SmartDashboard.putNumber("Arm angle", armEncoder.getPosition() * 0.9929 + 2.8217);
+    SmartDashboard.putNumber("Arm Encode Position", armEncoder.getPosition());
+    SmartDashboard.putNumber("Arm Angle", armEncoder.getPosition() * kArmTick2Deg);
 
-    SmartDashboard.putNumber("ClimberEncoder possition", climberEncoder.getPosition());
-    SmartDashboard.putNumber("Climber angle", climberEncoder.getPosition() * kArmTick2Deg+ 76.867);
+    SmartDashboard.putNumber("Climber Encode Position", climberEncoder.getPosition());
+    SmartDashboard.putNumber("Climber Angle", climberEncoder.getPosition() * kArmTick2Deg);
 
   }
 
@@ -372,7 +394,8 @@ public class Robot extends TimedRobot {
 
       if (startTime == 0.0) startTime = Timer.getFPGATimestamp();
       double time = Timer.getFPGATimestamp();
-      if(time - startTime < 1.0){
+
+      if(time - startTime < 1.0){                                    //spin for 1 sec
         steering_adjust = 0.2;                                       //seek for the target by spinning in place at a safe speed.
         tankDrive(steering_adjust, -steering_adjust);
       }
@@ -458,8 +481,20 @@ public class Robot extends TimedRobot {
       tankDrive(speed, speed);
     }
     else{
-      tankDrive(0,0);
+      stop();
       driveDistanceFinished = true;
+    }
+  }
+
+  public void driveTime(double timeLimit, double speed){
+    if (startTime == 0.0) startTime = Timer.getFPGATimestamp();
+
+    double time = Timer.getFPGATimestamp();
+    if (time - startTime < timeLimit){
+      tankDrive(speed, speed);
+    }
+    else{
+      stop();
     }
   }
 
@@ -476,32 +511,6 @@ public class Robot extends TimedRobot {
     else joystickInput1 = joystickInput2;
 
     tankDrive(joystickInput1, joystickInput2);
-  }
-
-  //drive straight with a preset speed
-  public void driveStraight(double speed){
-
-    double joystickInput1 = speed;
-    double joystickInput2 = speed;
-
-    //to drive straight, speed in both sides should be the same,
-    //drive straight with max speed of both sides
-    if (Math.abs(joystickInput1) > Math.abs(joystickInput2)) joystickInput2 = joystickInput1;
-    else joystickInput1 = joystickInput2;
-
-    tankDrive(joystickInput1, joystickInput2);
-  }
-
-  public void driveTime(double timeLimit, double speed) {
-    if (startTime == 0.0) startTime = Timer.getFPGATimestamp();
-
-    double time = Timer.getFPGATimestamp();
-    if (time - startTime < timeLimit){
-      tankDrive(speed, speed);
-    }
-    else{
-      stop();
-    }
   }
 
   public void stop(){
@@ -531,7 +540,7 @@ public class Robot extends TimedRobot {
   public void setIntakeIn(){
     intake.set(-1.0);
   }
-
+/*
   public void setIntakeIn(double time){
     double timeStart = Timer.getFPGATimestamp();
 
@@ -540,6 +549,7 @@ public class Robot extends TimedRobot {
     }
     intake.set(0);
   }
+*/
 
   public void setIntakeOut(){
       intake.set(1.0);
@@ -550,16 +560,13 @@ public class Robot extends TimedRobot {
     double time = Timer.getFPGATimestamp();
      // it will shoot the ball for 2 seconds
      if (time - startTime < 2){
-      setIntakeIn();
+      setIntakeOut();
     }
     else{
       intake.set(0);
-      //move backward straight for 4ft
-      driveDistance(4.0, -0.2);
-    }
-    
-   
-    
+      //move backward straight for 8ft
+      driveDistance(8.0, -0.2);
+    }   
 
     //if (driveDistanceFinished) driveToTarget();
 
@@ -576,4 +583,5 @@ public class Robot extends TimedRobot {
     angle = climberEncoder.getPosition() * kArmTick2Deg;
     return angle;
   }
+  
 }// end of robot.java
